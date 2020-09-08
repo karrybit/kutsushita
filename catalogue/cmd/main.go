@@ -1,6 +1,7 @@
 package main
 
 import (
+	"catalogue"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ func main() {
 	// TODO: db
 
 	// TODO: service
+	_ = catalogue.NewCatalogueService()
 
 	// TODO: launch server
 
