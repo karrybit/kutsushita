@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func LoggingMiddleware(logger log.Logger) Middleware {
+func LoggingMiddleware(logger *log.Logger) Middleware {
 	return func(next Service) Service {
 		return loggingMiddleware{
 			next:   next,
@@ -17,7 +17,7 @@ func LoggingMiddleware(logger log.Logger) Middleware {
 
 type loggingMiddleware struct {
 	next   Service
-	logger log.Logger
+	logger *log.Logger
 }
 
 func (mw loggingMiddleware) List(tags []string, order string, pageNum, pageSize int) (socks []Sock, err error) {

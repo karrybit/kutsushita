@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -44,13 +45,13 @@ var (
 )
 
 type catalogueService struct {
-	db *sql.DB
-	// logger
+	db     *sql.DB
+	logger *log.Logger
 }
 
 // TODO db, logger as argument
-func NewCatalogueService(db *sql.DB) Service {
-	return &catalogueService{db}
+func NewCatalogueService(db *sql.DB, logger *log.Logger) Service {
+	return &catalogueService{db, logger}
 }
 
 func (s catalogueService) List(tags []string, order string, pageNum, pageSize int) ([]Sock, error) {
