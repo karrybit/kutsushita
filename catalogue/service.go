@@ -2,6 +2,7 @@ package catalogue
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -75,7 +76,12 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 	query += ";"
 
 	// TODO: exec query to db
-	// build query self
+	err := fmt.Errorf("dummy")
+	if err != nil {
+		// TODO: log
+		// TODO: wrap error
+		return []Sock{}, ErrDBConnection
+	}
 
 	for i, sock := range socks {
 		socks[i].ImageURL = []string{sock.ImageURL_1, sock.ImageURL_2}
@@ -91,20 +97,96 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 }
 
 func (s *catalogueService) Count(tags []string) (int, error) {
-	// TODO:
-	return 0, nil
+	query := "SELECT COUNT(DISTINCT sock.sock_id) FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
+
+	var args []interface{}
+
+	for i, t := range tags {
+		if i == 0 {
+			query += " WHERE tag.name=?"
+		} else {
+			query += " OR tag.name=?"
+		}
+		args = append(args, t)
+	}
+
+	query += ";"
+
+	// TODO: exec query
+	err := fmt.Errorf("dummy")
+	if err != nil {
+		// TODO: log
+		// TODO: wrap error
+		return 0, ErrDBConnection
+	}
+
+	// TODO: defer close db
+
+	var count int
+
+	// TODO: exec query
+	if err != nil {
+		// TODO: log
+		// TODO: wrap error
+		return 0, ErrDBConnection
+	}
+
+	return count, nil
 }
 
 func (s *catalogueService) Get(id string) (Sock, error) {
-	return Sock{}, nil
+	query := baseQuery + " WHERE sock.sock_id =? GROUP BY sock.sock_id;"
+
+	var sock Sock
+
+	// TODO: exec query
+	err := fmt.Errorf("dummy")
+	if err != nil {
+		// TODO: log
+		// TODO: wrap error
+		return Sock{}, ErrNotFound
+	}
+
+	sock.ImageURL = []string{sock.ImageURL_1, sock.ImageURL_2}
+	sock.Tags = strings.Split(sock.TagString, ",")
+
+	return sock, nil
 }
 
 func (s *catalogueService) Health() []Health {
-	return []Health{}
+	var health []Health
+	dbstatus := "OK"
+
+	// TODO: ping db
+	err := fmt.Errorf("dummy")
+	if err != nil {
+		dbstatus = "err"
+	}
+
+	app := Health{"catalogue", "OK", time.Now().String()}
+	db := Health{"catalogue-db", dbstatus, time.Now().String()}
+
+	health = append(health, app)
+	health = append(health, db)
+
+	return health
 }
 
 func (s *catalogueService) Tags() ([]string, error) {
-	return []string{}, nil
+	var tags []string
+	query := "SELECT name FROM tag;"
+
+	// TODO: exec query
+	err := fmt.Errorf("dummy")
+	if err != nil {
+		// TODO; log
+		// TODO: wrap error
+		return []string{}, ErrDBConnection
+	}
+
+	// TODO: build tags
+
+	return tags, nil
 }
 
 func cut(socks []Sock, pageNum, pageSize int) []Sock {
