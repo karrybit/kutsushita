@@ -2,7 +2,6 @@ package catalogue
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -38,8 +37,6 @@ type Health struct {
 }
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrDBConnection = errors.New("database connection error")
 	// TODO dislike this
 	baseQuery = "SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
 )
@@ -49,7 +46,6 @@ type catalogueService struct {
 	logger *log.Logger
 }
 
-// TODO db, logger as argument
 func NewCatalogueService(db *sql.DB, logger *log.Logger) Service {
 	return &catalogueService{db, logger}
 }
@@ -79,17 +75,16 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 
 	rows, err := s.db.Query(query)
 	if err != nil {
-		// TODO log
-		// TODO wrap error
-		return []Sock{}, ErrDBConnection
+		s.logger.Println("database error", err)
+		return []Sock{}, fmt.Errorf("database connection error %w", err)
 	}
 
 	socks := []Sock{}
 	for rows.Next() {
 		sock := Sock{}
 		if err = rows.Scan(&sock); err != nil {
-			// TODO log
-			panic(err)
+			s.logger.Println("scan error", err)
+			return []Sock{}, fmt.Errorf("database data collapse %w", err)
 		}
 		socks = append(socks, sock)
 	}
@@ -125,17 +120,16 @@ func (s *catalogueService) Count(tags []string) (int, error) {
 
 	sel, err := s.db.Prepare(query)
 	if err != nil {
-		// TODO log
-		return 0, ErrDBConnection
+		s.logger.Println("database error", err)
+		return 0, fmt.Errorf("database connection error %w", err)
 	}
 	defer sel.Close()
 
 	var count int
 	err = sel.QueryRow(args...).Scan(&count)
 	if err != nil {
-		// TODO log
-		// TODO wrap error
-		return 0, ErrDBConnection
+		s.logger.Println("database error", err)
+		return 0, fmt.Errorf("database connection error %w", err)
 	}
 
 	return count, nil
@@ -147,9 +141,8 @@ func (s *catalogueService) Get(id string) (Sock, error) {
 	var sock Sock
 	err := s.db.QueryRow(query).Scan(&sock)
 	if err != nil {
-		// TODO log
-		// TODO wrap error
-		return Sock{}, ErrNotFound
+		s.logger.Println("database error", err)
+		return Sock{}, fmt.Errorf("not found %w", err)
 	}
 
 	sock.ImageURL = []string{sock.ImageURL1, sock.ImageURL2}
@@ -182,16 +175,15 @@ func (s *catalogueService) Tags() ([]string, error) {
 
 	rows, err := s.db.Query(query)
 	if err != nil {
-		// TODO; log
-		// TODO wrap error
-		return []string{}, ErrDBConnection
+		s.logger.Println("database error", err)
+		return []string{}, fmt.Errorf("database connection error %w", err)
 	}
 
 	var tag string
 	for rows.Next() {
 		err = rows.Scan(&tag)
 		if err != nil {
-			//TODO log
+			s.logger.Println("database error", err)
 			continue
 		}
 		tags = append(tags, tag)
