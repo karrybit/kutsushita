@@ -22,8 +22,8 @@ type Sock struct {
 	Name        string   `json:"name" db:"name"`
 	Description string   `json:"description" db:"description"`
 	ImageURL    []string `json:"imageUrl db:"-"`
-	ImageURL_1  string   `json:"-" db:"image_url_1"`
-	ImageURL_2  string   `json:"-" db:"image_url_2"`
+	ImageURL1   string   `json:"-" db:"image_url_1"`
+	ImageURL2   string   `json:"-" db:"image_url_2"`
 	Price       float32  `json:"price" db:"price"`
 	Count       int      `json:"count" db:"count"`
 	Tags        []string `json:"tag" db:"-"`
@@ -84,7 +84,7 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 	}
 
 	for i, sock := range socks {
-		socks[i].ImageURL = []string{sock.ImageURL_1, sock.ImageURL_2}
+		socks[i].ImageURL = []string{sock.ImageURL1, sock.ImageURL2}
 		socks[i].Tags = strings.Split(sock.TagString, ",")
 	}
 
@@ -147,7 +147,7 @@ func (s *catalogueService) Get(id string) (Sock, error) {
 		return Sock{}, ErrNotFound
 	}
 
-	sock.ImageURL = []string{sock.ImageURL_1, sock.ImageURL_2}
+	sock.ImageURL = []string{sock.ImageURL1, sock.ImageURL2}
 	sock.Tags = strings.Split(sock.TagString, ",")
 
 	return sock, nil
