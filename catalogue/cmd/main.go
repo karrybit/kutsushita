@@ -23,7 +23,6 @@ func main() {
 
 	// TODO opentracing
 
-	// TODO db
 	db, err := sql.Open("mysql", "user:password@/dbname")
 	if err != nil {
 		logger.Println("err", err)
@@ -39,13 +38,13 @@ func main() {
 	service := catalogue.NewCatalogueService(db, &logger)
 	service = catalogue.LoggingMiddleware(&logger)(service)
 
-	// TODO launch server
+	router := catalogue.MakeHTTPHandler(service, "./images/", &logger)
 
 	errc := make(chan error)
 
 	go func() {
 		logger.Println("transport", "HTTP", "port")
-		errc <- http.ListenAndServe(":80", nil)
+		errc <- http.ListenAndServe(":80", router)
 	}()
 
 	go func() {
