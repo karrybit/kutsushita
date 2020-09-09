@@ -1,6 +1,7 @@
 package catalogue
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -38,23 +39,23 @@ type Health struct {
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrDBConnection = errors.New("database connection error")
-	// TODO: dislike this
+	// TODO dislike this
 	baseQuery = "SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
 )
 
-// TODO: db, logger as argument
-func NewCatalogueService() Service {
-	return &catalogueService{}
-}
-
 type catalogueService struct {
-	// db
+	db *sql.DB
 	// logger
 }
 
+// TODO db, logger as argument
+func NewCatalogueService(db *sql.DB) Service {
+	return &catalogueService{db}
+}
+
 func (s catalogueService) List(tags []string, order string, pageNum, pageSize int) ([]Sock, error) {
-	var socks []Sock
 	query := baseQuery
+
 	var args []interface{}
 
 	for i, t := range tags {
@@ -75,12 +76,21 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 
 	query += ";"
 
-	// TODO: exec query to db
-	err := fmt.Errorf("dummy")
+	rows, err := s.db.Query(query)
 	if err != nil {
-		// TODO: log
-		// TODO: wrap error
+		// TODO log
+		// TODO wrap error
 		return []Sock{}, ErrDBConnection
+	}
+
+	socks := []Sock{}
+	for rows.Next() {
+		sock := Sock{}
+		if err = rows.Scan(&sock); err != nil {
+			// TODO log
+			panic(err)
+		}
+		socks = append(socks, sock)
 	}
 
 	for i, sock := range socks {
@@ -112,22 +122,18 @@ func (s *catalogueService) Count(tags []string) (int, error) {
 
 	query += ";"
 
-	// TODO: exec query
-	err := fmt.Errorf("dummy")
+	sel, err := s.db.Prepare(query)
 	if err != nil {
-		// TODO: log
-		// TODO: wrap error
+		// TODO log
 		return 0, ErrDBConnection
 	}
-
-	// TODO: defer close db
+	defer sel.Close()
 
 	var count int
-
-	// TODO: exec query
+	err = sel.QueryRow(args...).Scan(&count)
 	if err != nil {
-		// TODO: log
-		// TODO: wrap error
+		// TODO log
+		// TODO wrap error
 		return 0, ErrDBConnection
 	}
 
@@ -135,15 +141,13 @@ func (s *catalogueService) Count(tags []string) (int, error) {
 }
 
 func (s *catalogueService) Get(id string) (Sock, error) {
-	query := baseQuery + " WHERE sock.sock_id =? GROUP BY sock.sock_id;"
+	query := baseQuery + fmt.Sprintf(" WHERE sock.sock_id =%s GROUP BY sock.sock_id;", id)
 
 	var sock Sock
-
-	// TODO: exec query
-	err := fmt.Errorf("dummy")
+	err := s.db.QueryRow(query).Scan(&sock)
 	if err != nil {
-		// TODO: log
-		// TODO: wrap error
+		// TODO log
+		// TODO wrap error
 		return Sock{}, ErrNotFound
 	}
 
@@ -157,8 +161,7 @@ func (s *catalogueService) Health() []Health {
 	var health []Health
 	dbstatus := "OK"
 
-	// TODO: ping db
-	err := fmt.Errorf("dummy")
+	err := s.db.Ping()
 	if err != nil {
 		dbstatus = "err"
 	}
@@ -176,15 +179,22 @@ func (s *catalogueService) Tags() ([]string, error) {
 	var tags []string
 	query := "SELECT name FROM tag;"
 
-	// TODO: exec query
-	err := fmt.Errorf("dummy")
+	rows, err := s.db.Query(query)
 	if err != nil {
 		// TODO; log
-		// TODO: wrap error
+		// TODO wrap error
 		return []string{}, ErrDBConnection
 	}
 
-	// TODO: build tags
+	var tag string
+	for rows.Next() {
+		err = rows.Scan(&tag)
+		if err != nil {
+			//TODO log
+			continue
+		}
+		tags = append(tags, tag)
+	}
 
 	return tags, nil
 }

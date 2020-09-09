@@ -1,12 +1,16 @@
 package main
 
 import (
-	"catalogue"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"catalogue"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 const ServiceName = "catalogue"
@@ -14,14 +18,24 @@ const ServiceName = "catalogue"
 func main() {
 	// ctx := context.Background()
 
-	// TODO: opentracing
+	// TODO opentracing
 
-	// TODO: db
+	// TODO db
+	db, err := sql.Open("mysql", "user:password@/dbname")
+	if err != nil {
+		// TODO log
+		os.Exit(1)
+	}
+	defer db.Close()
 
-	// TODO: service
-	_ = catalogue.NewCatalogueService()
+	err = db.Ping()
+	if err != nil {
+		// TODO log
+	}
 
-	// TODO: launch server
+	_ = catalogue.NewCatalogueService(db)
+
+	// TODO launch server
 
 	errc := make(chan error)
 
