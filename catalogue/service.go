@@ -36,11 +36,6 @@ type Health struct {
 	Time    string `json:"time"`
 }
 
-var (
-	// TODO dislike this
-	baseQuery = "SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
-)
-
 type catalogueService struct {
 	db     *sql.DB
 	logger *log.Logger
@@ -51,24 +46,20 @@ func NewCatalogueService(db *sql.DB, logger *log.Logger) Service {
 }
 
 func (s catalogueService) List(tags []string, order string, pageNum, pageSize int) ([]Sock, error) {
-	query := baseQuery
-
-	var args []interface{}
+	query := "SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
 
 	for i, t := range tags {
 		if i == 0 {
-			query += " WHERE tag.name=?"
+			query += fmt.Sprintf(" WHERE tag.name=%s", t)
 		} else {
-			query += " OR tag.name=?"
+			query += fmt.Sprintf(" OR tag.name=%s", t)
 		}
-		args = append(args, t)
 	}
 
 	query += " GROUP BY id"
 
 	if order != "" {
-		query += " ORDER BY ?"
-		args = append(args, order)
+		query += fmt.Sprintf(" ORDER BY %s", order)
 	}
 
 	query += ";"
@@ -96,37 +87,38 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 
 	time.Sleep(0 * time.Millisecond)
 
-	// instead of offset query if not use base query
-	socks = cut(socks, pageNum, pageSize)
+	if pageNum == 0 || pageSize == 0 {
+		return []Sock{}, nil
+	}
 
-	return socks, nil
+	start := (pageNum * pageSize) - pageSize
+	if start > len(socks) {
+		return []Sock{}, nil
+	}
+
+	end := (pageNum * pageSize)
+	if end > len(socks) {
+		end = len(socks)
+	}
+
+	return socks[start:end], nil
 }
 
 func (s *catalogueService) Count(tags []string) (int, error) {
 	query := "SELECT COUNT(DISTINCT sock.sock_id) FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
 
-	var args []interface{}
-
 	for i, t := range tags {
 		if i == 0 {
-			query += " WHERE tag.name=?"
+			query += fmt.Sprintf(" WHERE tag.name=%s", t)
 		} else {
-			query += " OR tag.name=?"
+			query += fmt.Sprintf(" OR tag.name=%s", t)
 		}
-		args = append(args, t)
 	}
 
 	query += ";"
 
-	sel, err := s.db.Prepare(query)
-	if err != nil {
-		s.logger.Println("database error", err)
-		return 0, fmt.Errorf("database connection error %w", err)
-	}
-	defer sel.Close()
-
 	var count int
-	err = sel.QueryRow(args...).Scan(&count)
+	err := s.db.QueryRow(query).Scan(&count)
 	if err != nil {
 		s.logger.Println("database error", err)
 		return 0, fmt.Errorf("database connection error %w", err)
@@ -136,7 +128,7 @@ func (s *catalogueService) Count(tags []string) (int, error) {
 }
 
 func (s *catalogueService) Get(id string) (Sock, error) {
-	query := baseQuery + fmt.Sprintf(" WHERE sock.sock_id =%s GROUP BY sock.sock_id;", id)
+	query := fmt.Sprintf("SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id WHERE sock.sock_id =%s GROUP BY sock.sock_id;", id)
 
 	var sock Sock
 	err := s.db.QueryRow(query).Scan(&sock)
@@ -190,28 +182,4 @@ func (s *catalogueService) Tags() ([]string, error) {
 	}
 
 	return tags, nil
-}
-
-func cut(socks []Sock, pageNum, pageSize int) []Sock {
-	if pageNum == 0 || pageSize == 0 {
-		return []Sock{}
-	}
-	start := (pageNum * pageSize) - pageSize
-	if start > len(socks) {
-		return []Sock{}
-	}
-	end := (pageNum * pageSize)
-	if end > len(socks) {
-		end = len(socks)
-	}
-	return socks[start:end]
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }
