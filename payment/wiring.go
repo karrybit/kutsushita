@@ -8,7 +8,8 @@ import (
 
 func WireUp(ctx context.Context, declineAmount float32, serviceName string) (http.Handler, *log.Logger) {
 	logger := log.Logger{}
-	_ = NewAuthorisationService(declineAmount)
+	service := NewAuthorisationService(declineAmount)
+	service = LoggingMiddleware(&logger)(service)
 
 	// TODO endpoints
 	// TODO router
