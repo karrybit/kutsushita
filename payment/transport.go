@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/go-chi/chi"
 )
 
-func MakeHTTPHandler(service Service, logger *log.Logger) *chi.Mux {
+func MakeHTTPHandler(service Service) *chi.Mux {
 	r := chi.NewRouter()
 	r.Post("/paymentauth", auth(service))
 	r.Get("/health", health(service))

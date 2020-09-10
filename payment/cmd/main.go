@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,13 +23,16 @@ func main() {
 
 	// TODO tracer
 
-	ctx := context.Background()
-	handler, logger := payment.WireUp(ctx, float32(*declineAmount), ServiceName)
+	logger := log.Logger{}
+	service := payment.NewAuthorisationService(float32(*declineAmount))
+	service = payment.LoggingMiddleware(&logger)(service)
+
+	router := payment.MakeHTTPHandler(service)
 
 	errc := make(chan error)
 	go func() {
 		logger.Println("transport", "HTTP", "port", *port)
-		errc <- http.ListenAndServe(":"+*port, handler)
+		errc <- http.ListenAndServe(":"+*port, router)
 	}()
 
 	go func() {
