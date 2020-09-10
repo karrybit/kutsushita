@@ -56,7 +56,7 @@ func main() {
 	service := catalogue.NewCatalogueService(db, &logger)
 	service = catalogue.LoggingMiddleware(&logger)(service)
 
-	router := catalogue.MakeHTTPHandler(service, *images, &logger)
+	router := catalogue.MakeHTTPHandler(service, *images)
 
 	errc := make(chan error)
 

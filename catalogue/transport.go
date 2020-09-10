@@ -2,13 +2,12 @@ package catalogue
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/go-chi/chi"
 )
 
-func MakeHTTPHandler(service Service, imagePath string, logger *log.Logger) *chi.Mux {
+func MakeHTTPHandler(service Service, imagePath string) *chi.Mux {
 	r := chi.NewRouter()
 	r.Route("/catalogue", func(r chi.Router) {
 		r.Get("/", list(service))
