@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -56,13 +55,13 @@ func main() {
 	service := catalogue.NewCatalogueService(db, &logger)
 	service = catalogue.LoggingMiddleware(&logger)(service)
 
-	router := catalogue.MakeHTTPHandler(service, *images)
+	app := catalogue.MakeHTTPHandler(service, *images)
 
 	errc := make(chan error)
 
 	go func() {
 		logger.Println("transport", "HTTP", "port")
-		errc <- http.ListenAndServe(":"+*port, router)
+		errc <- app.Listen(":" + *port)
 	}()
 
 	go func() {

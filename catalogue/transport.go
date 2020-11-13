@@ -2,76 +2,76 @@ package catalogue
 
 import (
 	"encoding/json"
-	"net/http"
 
-	"github.com/go-chi/chi"
+	"github.com/gofiber/fiber/v2"
 )
 
-func MakeHTTPHandler(service Service, imagePath string) *chi.Mux {
-	r := chi.NewRouter()
-	r.Route("/catalogue", func(r chi.Router) {
-		r.Get("/", list(service))
-		r.Get("/size", size(service))
-		r.Get("/{id}", id(service))
-	})
-	r.Get("/tags", tags(service))
-	r.Get("/health", health(service))
-	return r
+type fiberHandlerFunc func(c *fiber.Ctx) error
+
+func MakeHTTPHandler(service Service, imagePath string) *fiber.App {
+	app := fiber.New()
+	catalogue := app.Group("/catalogue")
+	catalogue.Get("/", list(service))
+	catalogue.Get("/size", size(service))
+	catalogue.Get("/:id", id(service))
+	app.Get("/tags", tags(service))
+	app.Get("/health", health(service))
+	return app
 }
 
-func list(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_ = r.Context()
-		req, _ := decodeListRequest(r)
+func list(service Service) fiberHandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
+		req, _ := decodeListRequest(c)
 		socks, err := service.List(req.Tags, req.Order, req.PageNum, req.PageSize)
 		resp := listResponse{socks, err}
 		b, _ := json.Marshal(resp)
-		w.Write(b)
+		return c.Send(b)
 	}
 }
 
-func size(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_ = r.Context()
-		req, _ := decodeCountRequest(r)
+func size(service Service) fiberHandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
+		req, _ := decodeCountRequest(c)
 		n, err := service.Count(req.Tags)
 		resp := countResponse{n, err}
 		b, _ := json.Marshal(resp)
-		w.Write(b)
+		return c.Send(b)
 	}
 }
 
-func id(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+func id(service Service) fiberHandlerFunc {
+	return func(c *fiber.Ctx) error {
+		ctx := c.Context()
 		id, ok := ctx.Value("id").(string)
 		if !ok {
-			http.NotFound(w, r)
-			return
+			c.Context().NotFound()
+			return nil
 		}
 		sock, err := service.Get(id)
 		resp := getResponse{sock, err}
 		b, _ := json.Marshal(resp)
-		w.Write(b)
+		return c.Send(b)
 	}
 }
 
-func tags(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_ = r.Context()
+func tags(service Service) fiberHandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
 		tags, err := service.Tags()
 		resp := tagsResponse{Tags: tags, Err: err}
 		b, _ := json.Marshal(resp)
-		w.Write(b)
+		return c.Send(b)
 	}
 }
 
-func health(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_ = r.Context()
+func health(service Service) fiberHandlerFunc {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
 		health := service.Health()
 		resp := healthResponse{health}
 		b, _ := json.Marshal(resp)
-		w.Write(b)
+		return c.Send(b)
 	}
 }

@@ -1,26 +1,28 @@
 package catalogue
 
 import (
-	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/gofiber/fiber/v2"
 )
 
-func decodeListRequest(r *http.Request) (listRequest, error) {
+func decodeListRequest(ctx *fiber.Ctx) (listRequest, error) {
+	_ = ctx.Context()
 	pageNum := 1
-	if page := r.FormValue("page"); page != "" {
+	if page := ctx.FormValue("page"); page != "" {
 		pageNum, _ = strconv.Atoi(page)
 	}
 	pageSize := 10
-	if size := r.FormValue("size"); size != "" {
+	if size := ctx.FormValue("size"); size != "" {
 		pageSize, _ = strconv.Atoi(size)
 	}
 	order := "id"
-	if sort := r.FormValue("sort"); sort != "" {
+	if sort := ctx.FormValue("sort"); sort != "" {
 		order = strings.ToLower(sort)
 	}
 	tags := []string{}
-	if tagsval := r.FormValue("tags"); tagsval != "" {
+	if tagsval := ctx.FormValue("tags"); tagsval != "" {
 		tags = strings.Split(tagsval, ",")
 	}
 	return listRequest{
@@ -31,9 +33,10 @@ func decodeListRequest(r *http.Request) (listRequest, error) {
 	}, nil
 }
 
-func decodeCountRequest(r *http.Request) (countRequest, error) {
+func decodeCountRequest(ctx *fiber.Ctx) (countRequest, error) {
+	_ = ctx.Context()
 	tags := []string{}
-	if tagsval := r.FormValue("tags"); tagsval != "" {
+	if tagsval := ctx.FormValue("tags"); tagsval != "" {
 		tags = strings.Split(tagsval, ",")
 	}
 	return countRequest{
