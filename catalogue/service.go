@@ -2,11 +2,11 @@ package catalogue
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 )
 
 type Service interface {
@@ -39,10 +39,10 @@ type Health struct {
 
 type catalogueService struct {
 	db     *sqlx.DB
-	logger *log.Logger
+	logger *zap.Logger
 }
 
-func NewCatalogueService(db *sqlx.DB, logger *log.Logger) Service {
+func NewCatalogueService(db *sqlx.DB, logger *zap.Logger) Service {
 	return &catalogueService{db, logger}
 }
 
@@ -71,7 +71,7 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 
 	socks := []Sock{}
 	if err := s.db.Select(&socks, query); err != nil {
-		s.logger.Println("database error", err)
+		s.logger.Error("database error", zap.Error(err))
 		return []Sock{}, fmt.Errorf("database connection error %w", err)
 	}
 
@@ -111,7 +111,7 @@ func (s *catalogueService) Count(tags []string) (int, error) {
 	var count int
 	err := s.db.QueryRow(query).Scan(&count)
 	if err != nil {
-		s.logger.Println("database error", err)
+		s.logger.Error("database error", zap.Error(err))
 		return 0, fmt.Errorf("database connection error %w", err)
 	}
 
@@ -123,7 +123,7 @@ func (s *catalogueService) Get(id string) (Sock, error) {
 
 	var sock Sock
 	if err := s.db.Get(&sock, query); err != nil {
-		s.logger.Println("database error", err)
+		s.logger.Error("database error", zap.Error(err))
 		return Sock{}, fmt.Errorf("not found %w", err)
 	}
 
@@ -155,7 +155,7 @@ func (s *catalogueService) Tags() ([]string, error) {
 	query := "SELECT name FROM tag;"
 
 	if err := s.db.Select(&tags, query); err != nil {
-		s.logger.Println("database error", err)
+		s.logger.Error("database error", zap.Error(err))
 		return []string{}, fmt.Errorf("database connection error %w", err)
 	}
 

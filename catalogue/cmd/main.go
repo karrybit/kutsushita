@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 )
 
 const ServiceName = "catalogue"
@@ -36,31 +36,29 @@ func main() {
 
 	// ctx := context.Background()
 
-	var logger log.Logger
+	logger := zap.L()
 
 	// TODO opentelemetry
 
 	db, err := sqlx.Connect("mysql", "user:password@/dbname")
 	if err != nil {
-		logger.Println("err", err)
-		os.Exit(1)
+		logger.Fatal("Error", zap.Error(err))
 	}
 	defer db.Close()
 
-	err = db.Ping()
-	if err != nil {
-		logger.Println("Error", "Unable to connect to Database", "DSN")
+	if err = db.Ping(); err != nil {
+		logger.Error("Error", zap.Error(err))
 	}
 
-	service := catalogue.NewCatalogueService(db, &logger)
-	service = catalogue.LoggingMiddleware(&logger)(service)
+	service := catalogue.NewCatalogueService(db, logger)
+	service = catalogue.LoggingMiddleware(logger)(service)
 
 	app := catalogue.MakeHTTPHandler(service, *images)
 
 	errc := make(chan error)
 
 	go func() {
-		logger.Println("transport", "HTTP", "port")
+		logger.Info("transport HTTP port")
 		errc <- app.Listen(":" + *port)
 	}()
 
@@ -70,5 +68,5 @@ func main() {
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
-	fmt.Println("exit", <-errc)
+	logger.Info("exit", zap.Error(<-errc))
 }
