@@ -1,11 +1,12 @@
 package catalogue
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type Service interface {
@@ -37,15 +38,19 @@ type Health struct {
 }
 
 type catalogueService struct {
-	db     *sql.DB
+	db     *sqlx.DB
 	logger *log.Logger
 }
 
-func NewCatalogueService(db *sql.DB, logger *log.Logger) Service {
+func NewCatalogueService(db *sqlx.DB, logger *log.Logger) Service {
 	return &catalogueService{db, logger}
 }
 
 func (s catalogueService) List(tags []string, order string, pageNum, pageSize int) ([]Sock, error) {
+	if pageNum == 0 || pageSize == 0 {
+		return []Sock{}, nil
+	}
+
 	query := "SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id"
 
 	for i, t := range tags {
@@ -64,20 +69,10 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 
 	query += ";"
 
-	rows, err := s.db.Query(query)
-	if err != nil {
+	socks := []Sock{}
+	if err := s.db.Select(&socks, query); err != nil {
 		s.logger.Println("database error", err)
 		return []Sock{}, fmt.Errorf("database connection error %w", err)
-	}
-
-	socks := []Sock{}
-	for rows.Next() {
-		sock := Sock{}
-		if err = rows.Scan(&sock); err != nil {
-			s.logger.Println("scan error", err)
-			return []Sock{}, fmt.Errorf("database data collapse %w", err)
-		}
-		socks = append(socks, sock)
 	}
 
 	for i, sock := range socks {
@@ -86,10 +81,6 @@ func (s catalogueService) List(tags []string, order string, pageNum, pageSize in
 	}
 
 	time.Sleep(0 * time.Millisecond)
-
-	if pageNum == 0 || pageSize == 0 {
-		return []Sock{}, nil
-	}
 
 	start := (pageNum * pageSize) - pageSize
 	if start > len(socks) {
@@ -131,8 +122,7 @@ func (s *catalogueService) Get(id string) (Sock, error) {
 	query := fmt.Sprintf("SELECT sock.sock_id AS id, sock.name, sock.description, sock.price, sock.count, sock.image_url_1, sock.image_url_2, GROUP_CONCAT(tag.name) AS tag_name FROM sock JOIN sock_tag ON sock.sock_id=sock_tag.sock_id JOIN tag ON sock_tag.tag_id=tag.tag_id WHERE sock.sock_id =%s GROUP BY sock.sock_id;", id)
 
 	var sock Sock
-	err := s.db.QueryRow(query).Scan(&sock)
-	if err != nil {
+	if err := s.db.Get(&sock, query); err != nil {
 		s.logger.Println("database error", err)
 		return Sock{}, fmt.Errorf("not found %w", err)
 	}
@@ -155,8 +145,7 @@ func (s *catalogueService) Health() []Health {
 	app := Health{"catalogue", "OK", time.Now().String()}
 	db := Health{"catalogue-db", dbstatus, time.Now().String()}
 
-	health = append(health, app)
-	health = append(health, db)
+	health = append(health, app, db)
 
 	return health
 }
@@ -165,20 +154,9 @@ func (s *catalogueService) Tags() ([]string, error) {
 	var tags []string
 	query := "SELECT name FROM tag;"
 
-	rows, err := s.db.Query(query)
-	if err != nil {
+	if err := s.db.Select(&tags, query); err != nil {
 		s.logger.Println("database error", err)
 		return []string{}, fmt.Errorf("database connection error %w", err)
-	}
-
-	var tag string
-	for rows.Next() {
-		err = rows.Scan(&tag)
-		if err != nil {
-			s.logger.Println("database error", err)
-			continue
-		}
-		tags = append(tags, tag)
 	}
 
 	return tags, nil

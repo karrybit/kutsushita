@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +12,7 @@ import (
 	"catalogue"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 )
 
 const ServiceName = "catalogue"
@@ -38,9 +38,9 @@ func main() {
 
 	var logger log.Logger
 
-	// TODO opentracing
+	// TODO opentelemetry
 
-	db, err := sql.Open("mysql", "user:password@/dbname")
+	db, err := sqlx.Connect("mysql", "user:password@/dbname")
 	if err != nil {
 		logger.Println("err", err)
 		os.Exit(1)
