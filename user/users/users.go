@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const ErrMissingField = "Error missing %v"
-
 type User struct {
 	FirstName string    `json:"firstName" bson:"firstName"`
 	LastName  string    `json:"lastName" bson:"lastName"`
@@ -31,16 +29,16 @@ func New() User {
 
 func (u *User) Validate() error {
 	if u.FirstName == "" {
-		return fmt.Errorf(ErrMissingField, "FirstName")
+		return fmt.Errorf("Error missing %v", "FirstName")
 	}
 	if u.LastName == "" {
-		return fmt.Errorf(ErrMissingField, "LastName")
+		return fmt.Errorf("Error missing %v", "LastName")
 	}
 	if u.Username == "" {
-		return fmt.Errorf(ErrMissingField, "Username")
+		return fmt.Errorf("Error missing %v", "Username")
 	}
 	if u.Password == "" {
-		return fmt.Errorf(ErrMissingField, "Password")
+		return fmt.Errorf("Error missing %v", "Password")
 	}
 	return nil
 }
