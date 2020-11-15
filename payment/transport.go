@@ -1,60 +1,62 @@
 package payment
 
 import (
-	"context"
 	"encoding/json"
-	"io/ioutil"
-	"net/http"
 
-	"github.com/go-chi/chi"
+	"github.com/gofiber/fiber/v2"
 )
 
-func MakeHTTPHandler(service Service) *chi.Mux {
-	r := chi.NewRouter()
-	r.Post("/paymentauth", auth(service))
-	r.Get("/health", health(service))
-	return r
+func MakeHTTPHandler(service Service) *fiber.App {
+	app := fiber.New()
+	app.Post("/paymentauth", auth(service))
+	app.Get("/health", health(service))
+	return app
 }
 
-func auth(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		amount, _ := decodeAuthoriseRequest(ctx, r)
-		authorisation, err := service.Authorise(amount)
-		resp := authoriseResponse{authorisation, err}
-		b, _ := json.Marshal(resp)
-		w.Write(b)
-	}
-}
-
-func decodeAuthoriseRequest(_ context.Context, r *http.Request) (float32, error) {
-	var bodyBytes []byte
-	if r.Body != nil {
-		var err error
-		bodyBytes, err = ioutil.ReadAll(r.Body)
+func auth(service Service) func(c *fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
+		amount, err := decodeAuthoriseRequest(c)
 		if err != nil {
-			return 0.0, err
+			return err
 		}
-	}
-	bodyString := string(bodyBytes)
 
+		authorisation, err := service.Authorise(amount)
+		if err != nil {
+			return err
+		}
+
+		resp := authoriseResponse{authorisation, err}
+		b, err := json.Marshal(resp)
+		if err != nil {
+			return err
+		}
+
+		return c.Send(b)
+	}
+}
+
+func decodeAuthoriseRequest(c *fiber.Ctx) (float32, error) {
 	var amount float32
-	if err := json.Unmarshal(bodyBytes, &amount); err != nil {
+	if err := c.BodyParser(&amount); err != nil {
 		return 0.0, err
 	}
 	if amount == 0.0 {
-		return 0.0, &UnmarshalKeyError{Key: "amount", JSON: bodyString}
+		return 0.0, &UnmarshalKeyError{Key: "amount", JSON: string(c.Body())}
 	}
 
 	return amount, nil
 }
 
-func health(service Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_ = r.Context()
+func health(service Service) func(c *fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		_ = c.Context()
 		health := service.Health()
 		resp := healthResponse{health}
-		b, _ := json.Marshal(resp)
-		w.Write(b)
+		b, err := json.Marshal(resp)
+		if err != nil {
+			return err
+		}
+		return c.Send(b)
 	}
 }

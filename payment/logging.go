@@ -1,16 +1,17 @@
 package payment
 
 import (
-	"log"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type loggingMiddleware struct {
 	next   Service
-	logger *log.Logger
+	logger *zap.Logger
 }
 
-func LoggingMiddleware(logger *log.Logger) Middleware {
+func LoggingMiddleware(logger *zap.Logger) Middleware {
 	return func(next Service) Service {
 		return &loggingMiddleware{next: next, logger: logger}
 	}
@@ -18,14 +19,14 @@ func LoggingMiddleware(logger *log.Logger) Middleware {
 
 func (mw *loggingMiddleware) Authorise(amount float32) (auth Authorisation, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Println("method", "Authorise", "result", auth.Authorised, "took", time.Since(begin))
+		mw.logger.Info("method Authorise", zap.Bool("result", auth.Authorised), zap.Duration("took", time.Since(begin)))
 	}(time.Now())
 	return mw.next.Authorise(amount)
 }
 
 func (mw *loggingMiddleware) Health() (health []Health) {
 	defer func(begin time.Time) {
-		mw.logger.Println("method", "Health", "result", len(health), "took", time.Since(begin))
+		mw.logger.Info("method Health", zap.Int("result", len(health)), zap.Duration("took", time.Since(begin)))
 	}(time.Now())
 	return mw.next.Health()
 }

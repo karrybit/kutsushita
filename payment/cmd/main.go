@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"payment"
 	"syscall"
+
+	"go.uber.org/zap"
 )
 
 const ServiceName = "payment"
@@ -23,16 +23,16 @@ func main() {
 
 	// TODO tracer
 
-	logger := log.Logger{}
+	logger := zap.L()
 	service := payment.NewAuthorisationService(float32(*declineAmount))
-	service = payment.LoggingMiddleware(&logger)(service)
+	service = payment.LoggingMiddleware(logger)(service)
 
 	router := payment.MakeHTTPHandler(service)
 
 	errc := make(chan error)
 	go func() {
-		logger.Println("transport", "HTTP", "port", *port)
-		errc <- http.ListenAndServe(":"+*port, router)
+		logger.Info("transport HTTP", zap.String("port", *port))
+		errc <- router.Listen(":" + *port)
 	}()
 
 	go func() {
@@ -41,5 +41,5 @@ func main() {
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
-	logger.Println("exit", <-errc)
+	logger.Info("exit", zap.Error(<-errc))
 }
