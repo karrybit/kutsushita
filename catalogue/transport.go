@@ -6,8 +6,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type fiberHandlerFunc func(c *fiber.Ctx) error
-
 func MakeHTTPHandler(service Service, imagePath string) *fiber.App {
 	app := fiber.New()
 	catalogue := app.Group("/catalogue")
@@ -19,7 +17,7 @@ func MakeHTTPHandler(service Service, imagePath string) *fiber.App {
 	return app
 }
 
-func list(service Service) fiberHandlerFunc {
+func list(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		_ = c.Context()
 		req, _ := decodeListRequest(c)
@@ -30,7 +28,7 @@ func list(service Service) fiberHandlerFunc {
 	}
 }
 
-func size(service Service) fiberHandlerFunc {
+func size(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		_ = c.Context()
 		req, _ := decodeCountRequest(c)
@@ -41,7 +39,7 @@ func size(service Service) fiberHandlerFunc {
 	}
 }
 
-func id(service Service) fiberHandlerFunc {
+func id(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		id, ok := ctx.Value("id").(string)
@@ -56,7 +54,7 @@ func id(service Service) fiberHandlerFunc {
 	}
 }
 
-func tags(service Service) fiberHandlerFunc {
+func tags(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		_ = c.Context()
 		tags, err := service.Tags()
@@ -66,7 +64,7 @@ func tags(service Service) fiberHandlerFunc {
 	}
 }
 
-func health(service Service) fiberHandlerFunc {
+func health(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		_ = c.Context()
 		health := service.Health()
