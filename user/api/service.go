@@ -48,11 +48,18 @@ func (s *fixedService) Login(ctx context.Context, username string, password stri
 	if err != nil {
 		return users.New(), err
 	}
-	if user.Password != calculatePassHash(password, user.Salt) {
+	pass, err := calculatePassHash(password, user.Salt)
+	if err != nil {
+		return users.New(), err
+	}
+	if user.Password != pass {
 		return users.New(), ErrUnauthorized
 	}
 
-	db.GetUserAttributes(ctx, &user)
+	if err := db.GetUserAttributes(ctx, &user); err != nil {
+		return users.New(), err
+	}
+
 	user.MaskCCs()
 	return user, nil
 }
@@ -60,12 +67,19 @@ func (s *fixedService) Login(ctx context.Context, username string, password stri
 func (s *fixedService) Register(ctx context.Context, username string, password string, email string, first string, last string) (string, error) {
 	user := users.New()
 	user.Username = username
-	user.Password = calculatePassHash(password, user.Salt)
+	pass, err := calculatePassHash(password, user.Salt)
+	if err != nil {
+		return "", err
+	}
+	user.Password = pass
 	user.Email = email
 	user.FirstName = first
 	user.LastName = last
-	err := db.CreateUser(ctx, &user)
-	return user.UserID, err
+	if err := db.CreateUser(ctx, &user); err != nil {
+		return "", err
+	}
+
+	return user.UserID, nil
 }
 
 func (s *fixedService) GetUsers(ctx context.Context, id string) ([]users.User, error) {
@@ -84,9 +98,16 @@ func (s *fixedService) GetUsers(ctx context.Context, id string) ([]users.User, e
 
 func (s *fixedService) PostUser(ctx context.Context, user users.User) (string, error) {
 	user.NewSalt()
-	user.Password = calculatePassHash(user.Password, user.Salt)
-	err := db.CreateUser(ctx, &user)
-	return user.UserID, err
+	pass, err := calculatePassHash(user.Password, user.Salt)
+	if err != nil {
+		return "", err
+	}
+	user.Password = pass
+	if err := db.CreateUser(ctx, &user); err != nil {
+		return "", err
+	}
+
+	return user.UserID, nil
 }
 
 func (s *fixedService) GetAddresses(ctx context.Context, id string) ([]users.Address, error) {
@@ -148,9 +169,15 @@ func (s *fixedService) Health(ctx context.Context) []Health {
 	return health
 }
 
-func calculatePassHash(pass, salt string) string {
+func calculatePassHash(pass, salt string) (string, error) {
 	h := sha1.New()
-	io.WriteString(h, salt)
-	io.WriteString(h, pass)
-	return fmt.Sprintf("%x", h.Sum(nil))
+
+	if _, err := io.WriteString(h, salt); err != nil {
+		return "", err
+	}
+	if _, err := io.WriteString(h, pass); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
