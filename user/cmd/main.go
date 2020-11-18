@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"user/api"
 	"user/db"
 	"user/db/mongodb"
 
@@ -54,14 +55,9 @@ func main() {
 		}
 	}
 
-	// fieldKeys := []string{"method"}
-
-	// service := api.NewFixedService()
-	// service = api.LoggingMiddleware(logger)(service)
-
-	// endpoints := api.MakeEndpoints(service, tracer)
-
-	// router := api.MakeHTTPHandler(endpoints, logger, tracer)
+	service := api.NewFixedService()
+	service = api.LoggingMiddleware(logger)(service)
+	router := api.MakeHTTPHandler(service, logger)
 
 	// TODO: httpMiddleware
 	// TODO: handler
@@ -69,11 +65,11 @@ func main() {
 	errc := make(chan error)
 	go func() {
 		logger.Info("transport HTTP", zap.String("port", port))
-		// errc <- http.ListenAndServe(fmt.Sprintf(":%v", port), handler)
+		errc <- router.Listen(":" + port)
 	}()
 
 	go func() {
-		c := make(chan os.Signal)
+		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
