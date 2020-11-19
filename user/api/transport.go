@@ -84,19 +84,52 @@ func getCustomers(service Service) func(c *fiber.Ctx) error {
 
 func postCustomers(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
+		ctx := c.Context()
+		req := new(users.User)
+		if err := json.Unmarshal(c.Body(), req); err != nil {
+			return err
+		}
+		id, err := service.PostUser(ctx, *req)
+		if err != nil {
+			return err
+		}
+		return c.JSON(postResponse{ID: id})
 	}
 }
 
 func getAddresses(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
+		ctx := c.Context()
+		req := new(GetRequest)
+		if err := json.Unmarshal(c.Body(), req); err != nil {
+			return err
+		}
+		addresses, err := service.GetAddresses(ctx, req.ID)
+		if err != nil {
+			return err
+		}
+		if req.ID == "" {
+			return c.JSON(EmbedStruct{addressesResponse{Addresses: addresses}})
+		}
+		if len(addresses) == 0 {
+			return c.JSON(users.Address{})
+		}
+		return c.JSON(addresses[0])
 	}
 }
 
 func postAddresses(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
+		ctx := c.Context()
+		req := new(addressPostRequest)
+		if err := json.Unmarshal(c.Body(), req); err != nil {
+			return err
+		}
+		id, err := service.PostAddress(ctx, req.Address, req.UserID)
+		if err != nil {
+			return err
+		}
+		return c.JSON(postResponse{ID: id})
 	}
 }
 
@@ -123,24 +156,37 @@ func getCards(service Service) func(c *fiber.Ctx) error {
 
 func postCards(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
+		ctx := c.Context()
+		req := new(cardPostRequest)
+		if err := json.Unmarshal(c.Body(), req); err != nil {
+			return err
+		}
+		id, err := service.PostCard(ctx, req.Card, req.UserID)
+		if err != nil {
+			return err
+		}
+		return c.JSON(postResponse{ID: id})
 	}
 }
 
 func delete(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
+		ctx := c.Context()
+		req := new(deleteRequest)
+		if err := json.Unmarshal(c.Body(), req); err != nil {
+			return err
+		}
+		if err := service.Delete(ctx, req.Entity, req.ID); err != nil {
+			return c.JSON(statusResponse{Status: false})
+		}
+		return c.JSON(statusResponse{Status: true})
 	}
 }
 
 func health(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		return nil
-	}
-}
-
-func methodNotAllowed(service Service) func(c *fiber.Ctx) error {
-	return func(c *fiber.Ctx) error {
-		return fiber.ErrMethodNotAllowed
+		ctx := c.Context()
+		health := service.Health(ctx)
+		return c.JSON(healthResponse{Health: health})
 	}
 }
