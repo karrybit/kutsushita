@@ -1,8 +1,6 @@
 package payment
 
 import (
-	"encoding/json"
-
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -26,13 +24,7 @@ func auth(service Service) func(c *fiber.Ctx) error {
 			return err
 		}
 
-		resp := authoriseResponse{authorisation, err}
-		b, err := json.Marshal(resp)
-		if err != nil {
-			return err
-		}
-
-		return c.Send(b)
+		return c.JSON(authoriseResponse{authorisation, err})
 	}
 }
 
@@ -52,11 +44,6 @@ func health(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		_ = c.Context()
 		health := service.Health()
-		resp := healthResponse{health}
-		b, err := json.Marshal(resp)
-		if err != nil {
-			return err
-		}
-		return c.Send(b)
+		return c.JSON(healthResponse{health})
 	}
 }
