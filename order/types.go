@@ -62,3 +62,26 @@ type Shipment struct {
 	ID   string
 	Name string
 }
+
+type NewOrderResource struct {
+	Customer string
+	Address  string
+	Card     string
+	Items    string
+}
+
+type PaymentRequest struct {
+	Address  Address
+	Card     Card
+	Customer Customer
+	Amount   float64
+}
+
+type PaymentResponse struct {
+	Authorised bool
+	Message    string
+}
+
+type HealthCheckResponse struct {
+	Health []HealthCheck `json:"health"`
+}
