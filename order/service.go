@@ -8,7 +8,7 @@ import (
 )
 
 type Service interface {
-	Ping(ctx context.Context) *HealthCheckResponse
+	Ping(ctx context.Context) []HealthCheck
 }
 
 type service struct {
@@ -21,8 +21,7 @@ func NewService(logger *zap.Logger) Service {
 	}
 }
 
-func (s *service) Ping(ctx context.Context) *HealthCheckResponse {
-	resp := new(HealthCheckResponse)
+func (s *service) Ping(ctx context.Context) []HealthCheck {
 	now := time.Now()
 	app := HealthCheck{
 		Service: "orders",
@@ -39,10 +38,7 @@ func (s *service) Ping(ctx context.Context) *HealthCheckResponse {
 		database.Status = "err"
 	}
 
-	resp.Health = append(resp.Health, app)
-	resp.Health = append(resp.Health, database)
-
-	return resp
+	return []HealthCheck{app, database}
 }
 
 func calculateTotal(items *[]Item) float64 {

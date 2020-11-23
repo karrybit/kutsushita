@@ -137,6 +137,11 @@ func health(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		health := service.Ping(ctx)
-		return c.JSON(health)
+		response := struct {
+			Health []HealthCheck `json:"health"`
+		}{
+			Health: health,
+		}
+		return c.JSON(response)
 	}
 }
