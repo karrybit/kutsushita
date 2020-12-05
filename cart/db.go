@@ -126,8 +126,8 @@ func (m *Mongo) GetCart(ctx context.Context, customerID string) (*Cart, error) {
 		}
 
 		cart = &Cart{
-			ID:         mongoCart.ID.String(),
-			CustomerID: mongoCustomer.ID.String(),
+			ID:         mongoCart.ID.Hex(),
+			CustomerID: mongoCustomer.ID.Hex(),
 			Items:      items,
 		}
 		return nil
@@ -293,8 +293,10 @@ func (m *Mongo) CreateItem(ctx context.Context, customerID string, item *Item) e
 			return err
 		}
 
+		itemObjectID := primitive.NewObjectID()
+		item.ID = itemObjectID.Hex()
 		mongoItem := MongoItem{
-			ID:    primitive.NewObjectID(),
+			ID:    itemObjectID,
 			Value: *item,
 		}
 		itemsCol := s.Client().Database(databaseName).Collection(itemsCollectionName)
