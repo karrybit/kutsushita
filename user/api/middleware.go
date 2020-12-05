@@ -26,7 +26,7 @@ type loggingMiddleware struct {
 	logger *zap.Logger
 }
 
-func (mw loggingMiddleware) Login(ctx context.Context, username string, password string) (user users.User, err error) {
+func (mw loggingMiddleware) Login(ctx context.Context, username string, password string) (user *users.User, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Info(
 			"method Login",
@@ -48,7 +48,7 @@ func (mw loggingMiddleware) Register(ctx context.Context, username string, passw
 	return mw.next.Register(ctx, username, password, email, first, last)
 }
 
-func (mw loggingMiddleware) PostUser(ctx context.Context, user users.User) (id string, err error) {
+func (mw loggingMiddleware) PostUser(ctx context.Context, user *users.User) (id string, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Info(
 			"method PostUser",
@@ -61,7 +61,7 @@ func (mw loggingMiddleware) PostUser(ctx context.Context, user users.User) (id s
 	return mw.next.PostUser(ctx, user)
 }
 
-func (mw loggingMiddleware) GetUsers(ctx context.Context, id string) (users []users.User, err error) {
+func (mw loggingMiddleware) GetUsers(ctx context.Context, id string) (users *[]*users.User, err error) {
 	defer func(begin time.Time) {
 		who := id
 		if who == "" {
@@ -70,14 +70,14 @@ func (mw loggingMiddleware) GetUsers(ctx context.Context, id string) (users []us
 		mw.logger.Info(
 			"method GetUsers",
 			zap.String("id", who),
-			zap.Int("result", len(users)),
+			zap.Int("result", len(*users)),
 			zap.Duration("took", time.Since(begin)),
 		)
 	}(time.Now())
 	return mw.next.GetUsers(ctx, id)
 }
 
-func (mw loggingMiddleware) PostAddress(ctx context.Context, userAddress users.Address, id string) (string, error) {
+func (mw loggingMiddleware) PostAddress(ctx context.Context, userAddress *users.Address, id string) (string, error) {
 	defer func(begin time.Time) {
 		mw.logger.Info(
 			"method PostAddress",
@@ -90,7 +90,7 @@ func (mw loggingMiddleware) PostAddress(ctx context.Context, userAddress users.A
 	return mw.next.PostAddress(ctx, userAddress, id)
 }
 
-func (mw loggingMiddleware) GetAddresses(ctx context.Context, id string) (userAddresses []users.Address, err error) {
+func (mw loggingMiddleware) GetAddresses(ctx context.Context, id string) (userAddresses *[]*users.Address, err error) {
 	defer func(begin time.Time) {
 		who := id
 		if who == "" {
@@ -99,14 +99,14 @@ func (mw loggingMiddleware) GetAddresses(ctx context.Context, id string) (userAd
 		mw.logger.Info(
 			"method GetAddress",
 			zap.String("id", who),
-			zap.Int("result", len(userAddresses)),
+			zap.Int("result", len(*userAddresses)),
 			zap.Duration("took", time.Since(begin)),
 		)
 	}(time.Now())
 	return mw.next.GetAddresses(ctx, id)
 }
 
-func (mw loggingMiddleware) PostCard(ctx context.Context, userCard users.Card, id string) (string, error) {
+func (mw loggingMiddleware) PostCard(ctx context.Context, userCard *users.Card, id string) (string, error) {
 	defer func(begin time.Time) {
 		cc := userCard
 		cc.MaskCC()
@@ -120,7 +120,7 @@ func (mw loggingMiddleware) PostCard(ctx context.Context, userCard users.Card, i
 	return mw.next.PostCard(ctx, userCard, id)
 }
 
-func (mw loggingMiddleware) GetCards(ctx context.Context, id string) (userCards []users.Card, err error) {
+func (mw loggingMiddleware) GetCards(ctx context.Context, id string) (userCards *[]*users.Card, err error) {
 	defer func(begin time.Time) {
 		who := id
 		if who == "" {
@@ -129,7 +129,7 @@ func (mw loggingMiddleware) GetCards(ctx context.Context, id string) (userCards 
 		mw.logger.Info(
 			"method GetCards",
 			zap.String("id", who),
-			zap.Int("result", len(userCards)),
+			zap.Int("result", len(*userCards)),
 			zap.Duration("took", time.Since(begin)),
 		)
 	}(time.Now())
@@ -148,11 +148,11 @@ func (mw loggingMiddleware) Delete(ctx context.Context, entity string, id string
 	return mw.next.Delete(ctx, entity, id)
 }
 
-func (mw loggingMiddleware) Health(ctx context.Context) (health []Health) {
+func (mw loggingMiddleware) Health(ctx context.Context) (health *[]*Health) {
 	defer func(begin time.Time) {
 		mw.logger.Info(
 			"method Health",
-			zap.Int("result", len(health)),
+			zap.Int("result", len(*health)),
 			zap.Duration("took", time.Since(begin)),
 		)
 	}(time.Now())

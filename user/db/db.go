@@ -12,19 +12,19 @@ import (
 type Database interface {
 	Init() error
 
-	GetUserByName(ctx context.Context, name string) (users.User, error)
-	GetUser(ctx context.Context, id string) (users.User, error)
-	GetUsers(ctx context.Context) ([]users.User, error)
+	GetUserByName(ctx context.Context, name string) (*users.User, error)
+	GetUser(ctx context.Context, id string) (*users.User, error)
+	GetUsers(ctx context.Context) (*[]*users.User, error)
 	CreateUser(ctx context.Context, user *users.User) error
 
 	GetUserAttributes(ctx context.Context, user *users.User) error
 
-	GetCard(ctx context.Context, id string) (users.Card, error)
-	GetCards(ctx context.Context) ([]users.Card, error)
+	GetCard(ctx context.Context, id string) (*users.Card, error)
+	GetCards(ctx context.Context) (*[]*users.Card, error)
 	CreateCard(ctx context.Context, userCard *users.Card, userID string) error
 
-	GetAddress(ctx context.Context, id string) (users.Address, error)
-	GetAddresses(ctx context.Context) ([]users.Address, error)
+	GetAddress(ctx context.Context, id string) (*users.Address, error)
+	GetAddresses(ctx context.Context) (*[]*users.Address, error)
 	CreateAddress(ctx context.Context, userAddress *users.Address, userID string) error
 
 	Delete(ctx context.Context, entity string, id string) error
@@ -70,28 +70,28 @@ func CreateUser(ctx context.Context, user *users.User) error {
 	return DefaultDb.CreateUser(ctx, user)
 }
 
-func GetUserByName(ctx context.Context, name string) (users.User, error) {
-	u, err := DefaultDb.GetUserByName(ctx, name)
+func GetUserByName(ctx context.Context, name string) (*users.User, error) {
+	user, err := DefaultDb.GetUserByName(ctx, name)
 	if err == nil {
-		u.AddLinks()
+		user.AddLinks()
 	}
-	return u, err
+	return user, err
 }
 
-func GetUser(ctx context.Context, id string) (users.User, error) {
-	u, err := DefaultDb.GetUser(ctx, id)
+func GetUser(ctx context.Context, id string) (*users.User, error) {
+	user, err := DefaultDb.GetUser(ctx, id)
 	if err == nil {
-		u.AddLinks()
+		user.AddLinks()
 	}
-	return u, err
+	return user, err
 }
 
-func GetUsers(ctx context.Context) ([]users.User, error) {
-	us, err := DefaultDb.GetUsers(ctx)
-	for k := range us {
-		us[k].AddLinks()
+func GetUsers(ctx context.Context) (*[]*users.User, error) {
+	users, err := DefaultDb.GetUsers(ctx)
+	for i := range *users {
+		(*users)[i].AddLinks()
 	}
-	return us, err
+	return users, err
 }
 
 func GetUserAttributes(ctx context.Context, user *users.User) error {
@@ -99,8 +99,8 @@ func GetUserAttributes(ctx context.Context, user *users.User) error {
 	if err != nil {
 		return err
 	}
-	for k := range user.Addresses {
-		user.Cards[k].AddLinks()
+	for i := range user.Addresses {
+		user.Cards[i].AddLinks()
 	}
 	return nil
 }
@@ -109,36 +109,36 @@ func CreateAddress(ctx context.Context, userAddress *users.Address, userID strin
 	return DefaultDb.CreateAddress(ctx, userAddress, userID)
 }
 
-func GetAddress(ctx context.Context, id string) (users.Address, error) {
-	a, err := DefaultDb.GetAddress(ctx, id)
+func GetAddress(ctx context.Context, id string) (*users.Address, error) {
+	address, err := DefaultDb.GetAddress(ctx, id)
 	if err == nil {
-		a.AddLinks()
+		address.AddLinks()
 	}
-	return a, err
+	return address, err
 }
 
-func GetAddresses(ctx context.Context) ([]users.Address, error) {
-	as, err := DefaultDb.GetAddresses(ctx)
-	for k := range as {
-		as[k].AddLinks()
+func GetAddresses(ctx context.Context) (*[]*users.Address, error) {
+	addresses, err := DefaultDb.GetAddresses(ctx)
+	for i := range *addresses {
+		(*addresses)[i].AddLinks()
 	}
-	return as, err
+	return addresses, err
 }
 
 func CreateCard(ctx context.Context, userCard *users.Card, userID string) error {
 	return DefaultDb.CreateCard(ctx, userCard, userID)
 }
 
-func GetCard(ctx context.Context, id string) (users.Card, error) {
+func GetCard(ctx context.Context, id string) (*users.Card, error) {
 	return DefaultDb.GetCard(ctx, id)
 }
 
-func GetCards(ctx context.Context) ([]users.Card, error) {
-	cs, err := DefaultDb.GetCards(ctx)
-	for k := range cs {
-		cs[k].AddLinks()
+func GetCards(ctx context.Context) (*[]*users.Card, error) {
+	cards, err := DefaultDb.GetCards(ctx)
+	for i := range *cards {
+		(*cards)[i].AddLinks()
 	}
-	return cs, err
+	return cards, err
 }
 
 func Delete(ctx context.Context, entity string, id string) error {

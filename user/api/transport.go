@@ -57,7 +57,7 @@ func getCustomers(service Service) func(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-		if len(us) == 0 {
+		if len(*us) == 0 {
 			if req.Attr == "addresses" {
 				return c.JSON(EmbedStruct{addressesResponse{Addresses: make([]users.Address, 0)}})
 			}
@@ -67,8 +67,8 @@ func getCustomers(service Service) func(c *fiber.Ctx) error {
 			return c.JSON(users.User{})
 		}
 
-		user := us[0]
-		if err := db.GetUserAttributes(ctx, &user); err != nil {
+		user := (*us)[0]
+		if err := db.GetUserAttributes(ctx, user); err != nil {
 			return err
 		}
 		if req.Attr == "address" {
@@ -89,7 +89,7 @@ func postCustomers(service Service) func(c *fiber.Ctx) error {
 		if err := json.Unmarshal(c.Body(), req); err != nil {
 			return err
 		}
-		id, err := service.PostUser(ctx, *req)
+		id, err := service.PostUser(ctx, req)
 		if err != nil {
 			return err
 		}
@@ -109,12 +109,16 @@ func getAddresses(service Service) func(c *fiber.Ctx) error {
 			return err
 		}
 		if req.ID == "" {
-			return c.JSON(EmbedStruct{addressesResponse{Addresses: addresses}})
+			as := make([]users.Address, len(*addresses))
+			for i := range *addresses {
+				as = append(as, *(*addresses)[i])
+			}
+			return c.JSON(EmbedStruct{addressesResponse{Addresses: as}})
 		}
-		if len(addresses) == 0 {
+		if len(*addresses) == 0 {
 			return c.JSON(users.Address{})
 		}
-		return c.JSON(addresses[0])
+		return c.JSON((*addresses)[0])
 	}
 }
 
@@ -125,7 +129,7 @@ func postAddresses(service Service) func(c *fiber.Ctx) error {
 		if err := json.Unmarshal(c.Body(), req); err != nil {
 			return err
 		}
-		id, err := service.PostAddress(ctx, req.Address, req.UserID)
+		id, err := service.PostAddress(ctx, &req.Address, req.UserID)
 		if err != nil {
 			return err
 		}
@@ -145,12 +149,16 @@ func getCards(service Service) func(c *fiber.Ctx) error {
 			return err
 		}
 		if req.ID == "" {
-			return c.JSON(EmbedStruct{cardsResponse{Cards: cards}})
+			cs := make([]users.Card, len(*cards))
+			for i := range *cards {
+				cs = append(cs, *(*cards)[i])
+			}
+			return c.JSON(EmbedStruct{cardsResponse{Cards: cs}})
 		}
-		if len(cards) == 0 {
+		if len(*cards) == 0 {
 			return c.JSON(users.Card{})
 		}
-		return c.JSON(cards[0])
+		return c.JSON((*cards)[0])
 	}
 }
 
@@ -161,7 +169,7 @@ func postCards(service Service) func(c *fiber.Ctx) error {
 		if err := json.Unmarshal(c.Body(), req); err != nil {
 			return err
 		}
-		id, err := service.PostCard(ctx, req.Card, req.UserID)
+		id, err := service.PostCard(ctx, &req.Card, req.UserID)
 		if err != nil {
 			return err
 		}
@@ -187,6 +195,10 @@ func health(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		health := service.Health(ctx)
-		return c.JSON(healthResponse{Health: health})
+		hs := make([]Health, len(*health))
+		for i := range *health {
+			hs = append(hs, *(*health)[i])
+		}
+		return c.JSON(healthResponse{Health: hs})
 	}
 }

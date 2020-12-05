@@ -22,8 +22,14 @@ var (
 	name            string
 	password        string
 	host            string
-	db              = "users"
 	ErrInvalidHexID = errors.New("Invalid Id Hex")
+)
+
+const (
+	databaseName            = "users"
+	customersCollectionName = "customers"
+	cardsCollectionName     = "cards"
+	addressesCollectionName = "addresses"
 )
 
 func init() {
@@ -50,20 +56,27 @@ func (m *Mongo) Init() error {
 	return m.EnsureIndexes(ctx)
 }
 
+func isID(id primitive.ObjectID) bson.M {
+	return bson.M{"_id": id}
+}
+
+func inIDs(ids *[]primitive.ObjectID) bson.M {
+	return bson.M{"_id": bson.M{"$in": *ids}}
+}
+
 // MongoUser is a wrapper for the users
 type MongoUser struct {
-	// TODO: ,
-	users.User `bson:",inline"`
 	ID         primitive.ObjectID   `bson:"_id"`
+	User       users.User           `bson:",inline"`
 	AddressIDs []primitive.ObjectID `bson:"addresses"`
 	CardIDs    []primitive.ObjectID `bson:"cards"`
 }
 
 // New Returns a new MongoUser
-func New() MongoUser {
-	u := users.New()
-	return MongoUser{
-		User:       u,
+func NewMongoUser(user users.User) *MongoUser {
+	return &MongoUser{
+		ID:         primitive.NewObjectID(),
+		User:       user,
 		AddressIDs: make([]primitive.ObjectID, 0),
 		CardIDs:    make([]primitive.ObjectID, 0),
 	}
@@ -75,9 +88,7 @@ func (mu *MongoUser) AddUserIDs() {
 		mu.User.Addresses = make([]users.Address, 0)
 	}
 	for _, id := range mu.AddressIDs {
-		mu.User.Addresses = append(mu.User.Addresses, users.Address{
-			ID: id.Hex(),
-		})
+		mu.User.Addresses = append(mu.User.Addresses, users.Address{ID: id.Hex()})
 	}
 	if mu.User.Cards == nil {
 		mu.User.Cards = make([]users.Card, 0)
@@ -94,20 +105,10 @@ type MongoAddress struct {
 	ID            primitive.ObjectID `bson:"_id"`
 }
 
-// AddID ObjectID as string
-func (m *MongoAddress) AddID() {
-	m.Address.ID = m.ID.Hex()
-}
-
 // MongoCard is a wrapper for Card
 type MongoCard struct {
 	users.Card `bson:",inline"`
 	ID         primitive.ObjectID `bson:"_id"`
-}
-
-// AddID ObjectID as string
-func (m *MongoCard) AddID() {
-	m.Card.ID = m.ID.Hex()
 }
 
 // CreateUser Insert user to MongoDB, including connected addresses and cards, update passed in user with Ids
@@ -116,51 +117,52 @@ func (m *Mongo) CreateUser(ctx context.Context, user *users.User) error {
 	defer cancel()
 
 	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		id := primitive.NewObjectID()
-		mu := New()
-		mu.User = *user
-		mu.ID = id
-		var carderr error
-		var addrerr error
-		mu.CardIDs, carderr = m.createCards(s, user.Cards)
-		mu.AddressIDs, addrerr = m.createAddresses(s, user.Addresses)
+		mongoUser := NewMongoUser(*user)
+		mongoUser.User.UserID = mongoUser.ID.Hex()
 
-		customers := s.Client().Database("").Collection("customers")
-		if _, err := customers.InsertOne(s, mu); err != nil {
-			// Gonna clean up if we can, ignore error
-			// because the user save error takes precedence.
-			m.cleanAttributes(s, mu)
+		var carderr error
+		mongoUser.CardIDs, carderr = m.createCards(s, &user.Cards)
+		var addrerr error
+		mongoUser.AddressIDs, addrerr = m.createAddresses(s, &user.Addresses)
+
+		customers := s.Client().Database(databaseName).Collection(customersCollectionName)
+		if _, err := customers.InsertOne(s, mongoUser); err != nil {
+			addressesCol := s.Client().Database(databaseName).Collection(addressesCollectionName)
+			if _, err := addressesCol.DeleteMany(s, inIDs(&mongoUser.AddressIDs)); err != nil {
+				return err
+			}
+			cardsCol := s.Client().Database(databaseName).Collection(cardsCollectionName)
+			if _, err := cardsCol.DeleteMany(s, inIDs(&mongoUser.CardIDs)); err != nil {
+				return err
+			}
 			return err
 		}
 
-		mu.User.UserID = mu.ID.Hex()
 		// Cheap err for attributess
 		if carderr != nil || addrerr != nil {
 			return fmt.Errorf("%v %v", carderr, addrerr)
 		}
-		*user = mu.User
 
 		return nil
 	})
 }
 
-func (m *Mongo) createCards(ctx context.Context, userCards []users.Card) ([]primitive.ObjectID, error) {
+func (m *Mongo) createCards(ctx context.Context, userCards *[]users.Card) ([]primitive.ObjectID, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	ids := make([]primitive.ObjectID, 0)
+	ids := make([]primitive.ObjectID, len(*userCards))
 	err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		for k, ca := range userCards {
-			id := primitive.NewObjectID()
-			mc := MongoCard{Card: ca, ID: id}
+		for i, card := range *userCards {
+			cardObjectID := primitive.NewObjectID()
+			card.ID = cardObjectID.Hex()
+			mongoCard := MongoCard{Card: card, ID: cardObjectID}
 
-			cards := s.Client().Database("").Collection("cards")
-			if _, err := cards.InsertOne(s, mc); err != nil {
+			if _, err := s.Client().Database(databaseName).Collection(cardsCollectionName).InsertOne(s, mongoCard); err != nil {
 				return err
 			}
 
-			ids = append(ids, id)
-			userCards[k].ID = id.Hex()
+			ids[i] = cardObjectID
 		}
 
 		return nil
@@ -169,123 +171,76 @@ func (m *Mongo) createCards(ctx context.Context, userCards []users.Card) ([]prim
 	return ids, err
 }
 
-func (m *Mongo) createAddresses(ctx context.Context, userAddresses []users.Address) ([]primitive.ObjectID, error) {
+func (m *Mongo) createAddresses(ctx context.Context, userAddresses *[]users.Address) ([]primitive.ObjectID, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	ids := make([]primitive.ObjectID, 0)
+	ids := make([]primitive.ObjectID, len(*userAddresses))
 	err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		for k, a := range userAddresses {
-			id := primitive.NewObjectID()
-			mongoAddress := MongoAddress{Address: a, ID: id}
-			addresses := s.Client().Database("").Collection("addresses")
+		for i, address := range *userAddresses {
+			addressObjectID := primitive.NewObjectID()
+			address.ID = addressObjectID.Hex()
+			mongoAddress := MongoAddress{Address: address, ID: addressObjectID}
+
+			addresses := s.Client().Database(databaseName).Collection(addressesCollectionName)
 			if _, err := addresses.InsertOne(s, mongoAddress); err != nil {
 				return err
 			}
-			ids = append(ids, id)
-			userAddresses[k].ID = id.Hex()
+
+			ids[i] = addressObjectID
 		}
 		return nil
 	})
 	return ids, err
 }
 
-func (m *Mongo) cleanAttributes(ctx context.Context, mu MongoUser) error {
-	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
-	defer cancel()
-
-	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		addresses := s.Client().Database("").Collection("addresses")
-		if _, err := addresses.DeleteMany(s, bson.M{"_id": bson.M{"$in": mu.AddressIDs}}); err != nil {
-			return err
-		}
-		cards := s.Client().Database("").Collection("cards")
-		_, err := cards.DeleteMany(s, bson.M{"_id": bson.M{"$in": mu.CardIDs}})
-		return err
-	})
-}
-
-func (m *Mongo) appendAttributeId(ctx context.Context, attr string, id primitive.ObjectID, userID string) error {
-	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
-	defer cancel()
-
-	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		customers := s.Client().Database("").Collection("customers")
-		_id, err := primitive.ObjectIDFromHex(userID)
-		if err != nil {
-			return err
-		}
-		// TODO: addtoset option
-		_, err = customers.UpdateOne(s, bson.M{"_id": _id}, bson.M{attr: id}, options.Update().SetUpsert(true))
-		return err
-	})
-}
-
-func (m *Mongo) removeAttributeId(ctx context.Context, attr string, id primitive.ObjectID, userID string) error {
-	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
-	defer cancel()
-
-	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		customers := s.Client().Database("").Collection("customers")
-		_id, err := primitive.ObjectIDFromHex(userID)
-		if err != nil {
-			return err
-		}
-		// TODO: pull option
-		_, err = customers.UpdateOne(s, bson.M{"_id": _id}, bson.M{attr: id})
-		return err
-	})
-}
-
 // GetUserByName Get user by their name
-func (m *Mongo) GetUserByName(ctx context.Context, name string) (users.User, error) {
+func (m *Mongo) GetUserByName(ctx context.Context, name string) (*users.User, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	mu := New()
+	mongoUser := new(MongoUser)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		customers := s.Client().Database("").Collection("customers")
-		return customers.FindOne(s, bson.M{"username": name}).Decode(&mu)
+		customers := s.Client().Database(databaseName).Collection(customersCollectionName)
+		return customers.FindOne(s, bson.M{"username": name}).Decode(mongoUser)
 	}); err != nil {
-		return users.User{}, err
+		return nil, err
 	}
 
-	mu.AddUserIDs()
-	return mu.User, nil
+	mongoUser.AddUserIDs()
+	return &mongoUser.User, nil
 }
 
 // GetUser Get user by their object id
-func (m *Mongo) GetUser(ctx context.Context, id string) (users.User, error) {
+func (m *Mongo) GetUser(ctx context.Context, id string) (*users.User, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	mu := New()
+	mongoUser := new(MongoUser)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
 		_id, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
 			return err
 		}
-		customers := s.Client().Database("").Collection("customers")
-		return customers.FindOne(s, _id).Decode(&mu)
+		customers := s.Client().Database(databaseName).Collection(customersCollectionName)
+		return customers.FindOne(s, _id).Decode(&mongoUser)
 	}); err != nil {
-		return users.User{}, err
+		return nil, err
 	}
 
-	mu.AddUserIDs()
-
-	return mu.User, nil
+	mongoUser.AddUserIDs()
+	return &mongoUser.User, nil
 }
 
 // GetUsers Get all users
-func (m *Mongo) GetUsers(ctx context.Context) ([]users.User, error) {
+func (m *Mongo) GetUsers(ctx context.Context) (*[]*users.User, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	var mongoUsers []MongoUser
-	users := make([]users.User, 0)
+	mongoUsers := new([]MongoUser)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
 		// TODO: add paginations
-		customers := s.Client().Database("").Collection("customers")
+		customers := s.Client().Database(databaseName).Collection(customersCollectionName)
 		cursor, err := customers.Find(s, nil)
 		if err != nil {
 			return err
@@ -293,15 +248,16 @@ func (m *Mongo) GetUsers(ctx context.Context) ([]users.User, error) {
 
 		return cursor.All(s, &mongoUsers)
 	}); err != nil {
-		return users, err
+		return nil, err
 	}
 
-	for _, mongoUser := range mongoUsers {
+	users := make([]*users.User, len(*mongoUsers))
+	for _, mongoUser := range *mongoUsers {
 		mongoUser.AddUserIDs()
-		users = append(users, mongoUser.User)
+		users = append(users, &mongoUser.User)
 	}
 
-	return users, nil
+	return &users, nil
 }
 
 // GetUserAttributes given a user, load all cards and addresses connected to that user
@@ -319,7 +275,7 @@ func (m *Mongo) GetUserAttributes(ctx context.Context, user *users.User) error {
 			ids = append(ids, _id)
 		}
 
-		addresses := s.Client().Database("").Collection("addresses")
+		addresses := s.Client().Database(databaseName).Collection(addressesCollectionName)
 		cursor, err := addresses.Find(s, bson.M{"_id": bson.M{"$in": ids}})
 		if err != nil {
 			return err
@@ -346,7 +302,7 @@ func (m *Mongo) GetUserAttributes(ctx context.Context, user *users.User) error {
 			ids = append(ids, _id)
 		}
 
-		cards := s.Client().Database("").Collection("cards")
+		cards := s.Client().Database(databaseName).Collection(cardsCollectionName)
 		cursor, err = cards.Find(s, bson.M{"_id": bson.M{"$in": ids}})
 		if err != nil {
 			return err
@@ -369,51 +325,49 @@ func (m *Mongo) GetUserAttributes(ctx context.Context, user *users.User) error {
 }
 
 // GetCard Gets card by objects Id
-func (m *Mongo) GetCard(ctx context.Context, id string) (users.Card, error) {
+func (m *Mongo) GetCard(ctx context.Context, id string) (*users.Card, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	mc := MongoCard{}
+	mongoCard := new(MongoCard)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		_id, err := primitive.ObjectIDFromHex(id)
+		cardObjectID, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
 			return err
 		}
-		cards := s.Client().Database("").Collection("cards")
-		return cards.FindOne(s, bson.M{"_id": _id}).Decode(&mc)
+		return s.Client().Database(databaseName).Collection(cardsCollectionName).
+			FindOne(s, isID(cardObjectID)).Decode(mongoCard)
 	}); err != nil {
-		return mc.Card, err
+		return nil, err
 	}
 
-	mc.AddID()
-	return mc.Card, nil
+	mongoCard.Card.ID = mongoCard.ID.Hex()
+	return &mongoCard.Card, nil
 }
 
 // GetCards Gets all cards
-func (m *Mongo) GetCards(ctx context.Context) ([]users.Card, error) {
+func (m *Mongo) GetCards(ctx context.Context) (*[]*users.Card, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	var mongoCards []MongoCard
-	cards := make([]users.Card, 0)
+	mongoCards := new([]MongoCard)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
 		// TODO: add pagination
-		cards := s.Client().Database("").Collection("cards")
-		cursor, err := cards.Find(s, nil)
+		cursor, err := s.Client().Database(databaseName).Collection(cardsCollectionName).Find(s, nil)
 		if err != nil {
 			return err
 		}
 		return cursor.All(s, &mongoCards)
 	}); err != nil {
-		return cards, err
+		return nil, err
 	}
 
-	for _, mongoCard := range mongoCards {
-		mongoCard.AddID()
-		cards = append(cards, mongoCard.Card)
+	cards := make([]*users.Card, len(*mongoCards))
+	for _, mc := range *mongoCards {
+		cards = append(cards, &mc.Card)
 	}
 
-	return cards, nil
+	return &cards, nil
 }
 
 // CreateCard adds card to MongoDB
@@ -422,50 +376,44 @@ func (m *Mongo) CreateCard(ctx context.Context, userCard *users.Card, userID str
 	defer cancel()
 
 	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		_, err := primitive.ObjectIDFromHex(userID)
+		userObjectID, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
 			return err
 		}
 
-		cards := s.Client().Database("").Collection("cards")
-
-		id := primitive.NewObjectID()
-		mongoCard := MongoCard{Card: *userCard, ID: id}
-		if _, err := cards.InsertOne(s, mongoCard); err != nil {
+		cardObjectID := primitive.NewObjectID()
+		userCard.ID = cardObjectID.Hex()
+		mongoCard := MongoCard{Card: *userCard, ID: cardObjectID}
+		if _, err := s.Client().Database(databaseName).Collection(cardsCollectionName).InsertOne(s, mongoCard); err != nil {
 			return err
 		}
 
-		if err := m.appendAttributeId(s, "cards", mongoCard.ID, userID); err != nil {
-			return err
-		}
-
-		mongoCard.AddID()
-		*userCard = mongoCard.Card
+		_, err = s.Client().Database(databaseName).Collection(customersCollectionName).
+			UpdateOne(s, isID(userObjectID), bson.M{"cards": mongoCard.ID}, options.Update().SetUpsert(true))
 
 		return err
 	})
 }
 
 // GetAddress Gets an address by object Id
-func (m *Mongo) GetAddress(ctx context.Context, id string) (users.Address, error) {
+func (m *Mongo) GetAddress(ctx context.Context, id string) (*users.Address, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	var userAddress users.Address
+	userAddress := new(users.Address)
 	err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		_id, err := primitive.ObjectIDFromHex(id)
+		addressObjectID, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
 			return err
 		}
 
-		addresses := s.Client().Database("").Collection("addresses")
-		ma := MongoAddress{}
-		if err := addresses.FindOne(s, _id).Decode(&ma); err != nil {
+		mongoAddress := new(MongoAddress)
+		if err := s.Client().Database(databaseName).Collection(addressesCollectionName).
+			FindOne(s, isID(addressObjectID)).Decode(mongoAddress); err != nil {
 			return err
 		}
 
-		ma.AddID()
-		userAddress = ma.Address
+		userAddress = &mongoAddress.Address
 		return nil
 	})
 
@@ -473,15 +421,14 @@ func (m *Mongo) GetAddress(ctx context.Context, id string) (users.Address, error
 }
 
 // GetAddresses gets all addresses
-func (m *Mongo) GetAddresses(ctx context.Context) ([]users.Address, error) {
+func (m *Mongo) GetAddresses(ctx context.Context) (*[]*users.Address, error) {
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
 	defer cancel()
 
-	var mongoAddresses []MongoAddress
-	userAddresses := make([]users.Address, 0)
+	mongoAddresses := new([]MongoAddress)
 	if err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
 		// TODO: add pagination
-		addresses := s.Client().Database("").Collection("addresses")
+		addresses := s.Client().Database(databaseName).Collection(addressesCollectionName)
 		cursor, err := addresses.Find(s, nil)
 		if err != nil {
 			return err
@@ -489,15 +436,15 @@ func (m *Mongo) GetAddresses(ctx context.Context) ([]users.Address, error) {
 
 		return cursor.All(s, &mongoAddresses)
 	}); err != nil {
-		return userAddresses, err
+		return nil, err
 	}
 
-	for _, mongoAddress := range mongoAddresses {
-		mongoAddress.AddID()
-		userAddresses = append(userAddresses, mongoAddress.Address)
+	userAddresses := make([]*users.Address, len(*mongoAddresses))
+	for _, mongoAddress := range *mongoAddresses {
+		userAddresses = append(userAddresses, &mongoAddress.Address)
 	}
 
-	return userAddresses, nil
+	return &userAddresses, nil
 }
 
 // CreateAddress Inserts Address into MongoDB
@@ -506,28 +453,20 @@ func (m *Mongo) CreateAddress(ctx context.Context, userAddress *users.Address, u
 	defer cancel()
 
 	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		_, err := primitive.ObjectIDFromHex(userID)
+		userObjectID, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
 			return err
 		}
 
-		addresses := s.Client().Database("").Collection("addresses")
-		id := primitive.NewObjectID()
-		mongoAddress := MongoAddress{Address: *userAddress, ID: id}
-		_, err = addresses.InsertOne(s, mongoAddress)
-		if err != nil {
+		addressObjectID := primitive.NewObjectID()
+		userAddress.ID = addressObjectID.Hex()
+		mongoAddress := MongoAddress{Address: *userAddress, ID: addressObjectID}
+		if _, err = s.Client().Database(databaseName).Collection(addressesCollectionName).InsertOne(s, mongoAddress); err != nil {
 			return err
 		}
 
-		// Address for anonymous user
-		err = m.appendAttributeId(s, "addresses", mongoAddress.ID, userID)
-		if err != nil {
-			return err
-		}
-
-		mongoAddress.AddID()
-		*userAddress = mongoAddress.Address
-
+		_, err = s.Client().Database(databaseName).Collection(customersCollectionName).
+			UpdateOne(s, isID(userObjectID), bson.M{"cards": mongoAddress.ID}, options.Update().SetUpsert(true))
 		return err
 	})
 }
@@ -538,12 +477,10 @@ func (m *Mongo) Delete(ctx context.Context, entity string, id string) error {
 	defer cancel()
 
 	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		_id, err := primitive.ObjectIDFromHex(id)
+		objectID, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
 			return err
 		}
-
-		collection := s.Client().Database("").Collection(entity)
 
 		if entity == "customers" {
 			user, err := m.GetUser(s, id)
@@ -551,42 +488,43 @@ func (m *Mongo) Delete(ctx context.Context, entity string, id string) error {
 				return err
 			}
 
-			addressIDs := make([]primitive.ObjectID, 0)
+			addressObjectIDs := make([]primitive.ObjectID, len(user.Addresses))
 			for _, address := range user.Addresses {
-				addressID, err := primitive.ObjectIDFromHex(address.ID)
+				addressObjectID, err := primitive.ObjectIDFromHex(address.ID)
 				if err != nil {
 					return err
 				}
-				addressIDs = append(addressIDs, addressID)
+				addressObjectIDs = append(addressObjectIDs, addressObjectID)
 			}
 
-			cardIDs := make([]primitive.ObjectID, 0)
+			cardObjectIDs := make([]primitive.ObjectID, len(user.Cards))
 			for _, card := range user.Cards {
 				cardID, err := primitive.ObjectIDFromHex(card.ID)
 				if err != nil {
 					return err
 				}
-				cardIDs = append(cardIDs, cardID)
+				cardObjectIDs = append(cardObjectIDs, cardID)
 			}
 
-			address := s.Client().Database("").Collection("addresses")
-			if _, err := address.DeleteMany(s, bson.M{"_id": bson.M{"$in": addressIDs}}); err != nil {
+			if _, err := s.Client().Database(databaseName).Collection(addressesCollectionName).
+				DeleteMany(s, inIDs(&addressObjectIDs)); err != nil {
 				return err
 			}
 
-			cards := s.Client().Database("").Collection("cards")
-			if _, err := cards.DeleteMany(s, bson.M{"_id": bson.M{"$in": cardIDs}}); err != nil {
+			if _, err := s.Client().Database(databaseName).Collection(cardsCollectionName).
+				DeleteMany(s, inIDs(&cardObjectIDs)); err != nil {
 				return err
 			}
 
 		} else {
-			customers := s.Client().Database("").Collection("customers")
-			if _, err := customers.UpdateMany(s, nil, bson.M{"$pull": bson.M{entity: _id}}); err != nil {
+			if _, err := s.Client().Database(databaseName).Collection(customersCollectionName).
+				UpdateMany(s, nil, bson.M{"$pull": bson.M{entity: objectID}}); err != nil {
 				return err
 			}
 		}
 
-		_, err = collection.DeleteMany(s, bson.M{"_id": _id})
+		collection := s.Client().Database(databaseName).Collection(entity)
+		_, err = collection.DeleteMany(s, isID(objectID))
 		return err
 	})
 }
@@ -595,7 +533,7 @@ func getURL() url.URL {
 	ur := url.URL{
 		Scheme: "mongodb",
 		Host:   host,
-		Path:   db,
+		Path:   databaseName,
 	}
 	if name != "" {
 		u := url.UserPassword(name, password)
@@ -610,11 +548,11 @@ func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 	defer cancel()
 
 	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
-		customers := s.Client().Database("").Collection("customers")
+		customersCol := s.Client().Database(databaseName).Collection(customersCollectionName)
 		index := mongo.IndexModel{Keys: []string{"username"}}
 		index.Options = options.Index()
 		index.Options.SetUnique(true).SetBackground(true).SetSparse(false)
-		_, err := customers.Indexes().CreateOne(s, index)
+		_, err := customersCol.Indexes().CreateOne(s, index)
 		return err
 	})
 }

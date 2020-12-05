@@ -18,16 +18,16 @@ var (
 
 // Service is the user service, providing operations for users to login, register, and retrieve customer information.
 type Service interface {
-	Login(ctx context.Context, username string, password string) (users.User, error) // GET /login
+	Login(ctx context.Context, username string, password string) (*users.User, error) // GET /login
 	Register(ctx context.Context, username string, password string, email string, first string, last string) (string, error)
-	GetUsers(ctx context.Context, id string) ([]users.User, error)
-	PostUser(ctx context.Context, user users.User) (string, error)
-	GetAddresses(ctx context.Context, id string) ([]users.Address, error)
-	PostAddress(ctx context.Context, userAddress users.Address, userID string) (string, error)
-	GetCards(ctx context.Context, id string) ([]users.Card, error)
-	PostCard(ctx context.Context, userCard users.Card, userID string) (string, error)
+	GetUsers(ctx context.Context, id string) (*[]*users.User, error)
+	PostUser(ctx context.Context, user *users.User) (string, error)
+	GetAddresses(ctx context.Context, id string) (*[]*users.Address, error)
+	PostAddress(ctx context.Context, userAddress *users.Address, userID string) (string, error)
+	GetCards(ctx context.Context, id string) (*[]*users.Card, error)
+	PostCard(ctx context.Context, userCard *users.Card, userID string) (string, error)
 	Delete(ctx context.Context, entity string, id string) error
-	Health(ctx context.Context) []Health // GET /health
+	Health(ctx context.Context) *[]*Health // GET /health
 }
 
 // NewFixedService returns a simple implementation of the Service interface,
@@ -43,21 +43,21 @@ type Health struct {
 	Time    string `json:"time"`
 }
 
-func (s *fixedService) Login(ctx context.Context, username string, password string) (users.User, error) {
+func (s *fixedService) Login(ctx context.Context, username string, password string) (*users.User, error) {
 	user, err := db.GetUserByName(ctx, username)
 	if err != nil {
-		return users.New(), err
+		return nil, err
 	}
 	pass, err := calculatePassHash(password, user.Salt)
 	if err != nil {
-		return users.New(), err
+		return nil, err
 	}
 	if user.Password != pass {
-		return users.New(), ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
-	if err := db.GetUserAttributes(ctx, &user); err != nil {
-		return users.New(), err
+	if err := db.GetUserAttributes(ctx, user); err != nil {
+		return nil, err
 	}
 
 	user.MaskCCs()
@@ -82,69 +82,85 @@ func (s *fixedService) Register(ctx context.Context, username string, password s
 	return user.UserID, nil
 }
 
-func (s *fixedService) GetUsers(ctx context.Context, id string) ([]users.User, error) {
+func (s *fixedService) GetUsers(ctx context.Context, id string) (us *[]*users.User, err error) {
 	if id == "" {
-		users, err := db.GetUsers(ctx)
-		for i, user := range users {
-			user.AddLinks()
-			users[i] = user
+		if us, err = db.GetUsers(ctx); err != nil {
+			return nil, err
 		}
-		return users, err
+	} else {
+		user, err := db.GetUser(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		*us = append(*us, user)
 	}
-	user, err := db.GetUser(ctx, id)
-	user.AddLinks()
-	return []users.User{user}, err
+
+	for i := range *us {
+		(*us)[i].AddLinks()
+	}
+	return us, err
 }
 
-func (s *fixedService) PostUser(ctx context.Context, user users.User) (string, error) {
+func (s *fixedService) PostUser(ctx context.Context, user *users.User) (string, error) {
 	user.NewSalt()
 	pass, err := calculatePassHash(user.Password, user.Salt)
 	if err != nil {
 		return "", err
 	}
 	user.Password = pass
-	if err := db.CreateUser(ctx, &user); err != nil {
+	if err := db.CreateUser(ctx, user); err != nil {
 		return "", err
 	}
 
 	return user.UserID, nil
 }
 
-func (s *fixedService) GetAddresses(ctx context.Context, id string) ([]users.Address, error) {
+func (s *fixedService) GetAddresses(ctx context.Context, id string) (addresses *[]*users.Address, err error) {
 	if id == "" {
-		addresses, err := db.GetAddresses(ctx)
-		for i, address := range addresses {
-			address.AddLinks()
-			addresses[i] = address
+		if addresses, err = db.GetAddresses(ctx); err != nil {
+			return addresses, err
 		}
-		return addresses, err
+	} else {
+		address, err := db.GetAddress(ctx, id)
+		if err != nil {
+			return addresses, err
+		}
+		*addresses = append(*addresses, address)
 	}
-	address, err := db.GetAddress(ctx, id)
-	address.AddLinks()
-	return []users.Address{address}, err
+
+	for i := range *addresses {
+		(*addresses)[i].AddLinks()
+	}
+
+	return addresses, nil
 }
 
-func (s *fixedService) PostAddress(ctx context.Context, userAddress users.Address, userID string) (string, error) {
-	err := db.CreateAddress(ctx, &userAddress, userID)
+func (s *fixedService) PostAddress(ctx context.Context, userAddress *users.Address, userID string) (string, error) {
+	err := db.CreateAddress(ctx, userAddress, userID)
 	return userAddress.ID, err
 }
 
-func (s *fixedService) GetCards(ctx context.Context, id string) ([]users.Card, error) {
+func (s *fixedService) GetCards(ctx context.Context, id string) (cards *[]*users.Card, err error) {
 	if id == "" {
-		cards, err := db.GetCards(ctx)
-		for i, card := range cards {
-			card.AddLinks()
-			cards[i] = card
+		if cards, err = db.GetCards(ctx); err != nil {
+			return nil, err
 		}
-		return cards, err
+	} else {
+		card, err := db.GetCard(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		*cards = append(*cards, card)
 	}
-	card, err := db.GetCard(ctx, id)
-	card.AddLinks()
-	return []users.Card{card}, err
+
+	for i := range *cards {
+		(*cards)[i].AddLinks()
+	}
+	return cards, nil
 }
 
-func (s *fixedService) PostCard(ctx context.Context, userCard users.Card, userID string) (string, error) {
-	err := db.CreateCard(ctx, &userCard, userID)
+func (s *fixedService) PostCard(ctx context.Context, userCard *users.Card, userID string) (string, error) {
+	err := db.CreateCard(ctx, userCard, userID)
 	return userCard.ID, err
 }
 
@@ -152,19 +168,19 @@ func (s *fixedService) Delete(ctx context.Context, entity string, id string) err
 	return db.Delete(ctx, entity, id)
 }
 
-func (s *fixedService) Health(ctx context.Context) []Health {
-	var health []Health
+func (s *fixedService) Health(ctx context.Context) *[]*Health {
+	health := new([]*Health)
 	dbstatus := "OK"
 
 	if err := db.Ping(ctx); err != nil {
 		dbstatus = "err"
 	}
 
-	app := Health{"user", "OK", time.Now().String()}
-	db := Health{"user-db", dbstatus, time.Now().String()}
+	app := &Health{"user", "OK", time.Now().String()}
+	db := &Health{"user-db", dbstatus, time.Now().String()}
 
-	health = append(health, app)
-	health = append(health, db)
+	*health = append(*health, app)
+	*health = append(*health, db)
 
 	return health
 }
