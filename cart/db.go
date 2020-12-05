@@ -293,9 +293,8 @@ func (m *Mongo) CreateItem(ctx context.Context, customerID string, item *Item) e
 			return err
 		}
 
-		itemObjectID, err := primitive.ObjectIDFromHex(customerID + mongoCart.ID.String())
 		mongoItem := MongoItem{
-			ID:    itemObjectID,
+			ID:    primitive.NewObjectID(),
 			Value: *item,
 		}
 		itemsCol := s.Client().Database(databaseName).Collection(itemsCollectionName)
