@@ -25,17 +25,18 @@ func getCart(service Service) func(c *fiber.Ctx) error {
 
 func deleteCart(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		_ = c.Context()
+		ctx := c.Context()
 		customerID := c.Params("customerID")
-		return nil
+		return service.DeleteCart(ctx, customerID)
 	}
 }
 
 func mergeCart(service Service) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		_ = c.Context()
+		ctx := c.Context()
 		customerID := c.Params("customerID")
-		return nil
+		sessionID := c.Query("sessionId")
+		return service.MargeCart(ctx, customerID, sessionID)
 	}
 }
 

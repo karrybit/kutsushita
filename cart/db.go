@@ -60,20 +60,26 @@ func InitDB() error {
 }
 
 type MongoCustomer struct {
-	ID      primitive.ObjectID   `bson:"_id"`
-	CartIDs []primitive.ObjectID `bson:"carts"`
+	ID     primitive.ObjectID `bson:"_id"`
+	CartID primitive.ObjectID `bson:"cart"`
 }
 
 type MongoCart struct {
-	ID   primitive.ObjectID `bson:"_id"`
-	Cart `bson:",inline"`
+	ID      primitive.ObjectID `bson:"_id"`
+	Cart    `bson:",inline"`
+	ItemIDs []primitive.ObjectID `bson:"items"`
 }
 
-func (m *Mongo) GetCart(ctx context.Context, customerID string) (*[]Cart, error) {
-	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
+type MongoItem struct {
+	ID   primitive.ObjectID `bson:"_id"`
+	Item Item               `bson:",inline"`
+}
+
+func (m *Mongo) GetCart(ctx context.Context, customerID string) (*Cart, error) {
+	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5*time.Second))
 	defer cancel()
 
-	carts := new([]Cart)
+	cart := new(Cart)
 	err := m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
 		id, err := primitive.ObjectIDFromHex(customerID)
 		if err != nil {
@@ -86,22 +92,91 @@ func (m *Mongo) GetCart(ctx context.Context, customerID string) (*[]Cart, error)
 		}
 
 		cartsCol := s.Client().Database(databaseName).Collection("carts")
-		cursor, err := cartsCol.Find(s, bson.M{"_id": bson.M{"$in": mongoCustomer.CartIDs}})
-		mongoCarts := new([]MongoCart)
-		if err := cursor.All(s, mongoCarts); err != nil {
+		mongoCart := new(MongoCart)
+		if err := cartsCol.FindOne(s, bson.M{"_id": mongoCustomer.CartID}).Decode(mongoCart); err != nil {
 			return err
 		}
 
-		for _, mongoCart := range *mongoCarts {
-			*carts = append(*carts, mongoCart.Cart)
-		}
 		return nil
 	})
-	return carts, err
+	return cart, err
+}
+
+func (m *Mongo) DeleteCart(ctx context.Context, customerID string) error {
+	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5*time.Second))
+	defer cancel()
+
+	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
+		id, err := primitive.ObjectIDFromHex(customerID)
+		if err != nil {
+			return err
+		}
+		customersCol := s.Client().Database(databaseName).Collection("customers")
+		mongoCustomer := new(MongoCustomer)
+		if err := customersCol.FindOne(s, bson.M{"_id": id}).Decode(mongoCustomer); err != nil {
+			return err
+		}
+
+		cartsCol := s.Client().Database(databaseName).Collection("carts")
+		mongoCart := new(MongoCart)
+		if err := cartsCol.FindOne(s, bson.M{"_id": id}).Decode(mongoCart); err != nil {
+			return err
+		}
+
+		itemsCol := s.Client().Database(databaseName).Collection("items")
+		if _, err = itemsCol.DeleteMany(s, bson.M{"_id": mongoCart.ItemIDs}); err != nil {
+			return err
+		}
+
+		_, err = cartsCol.DeleteOne(s, bson.M{"_id": mongoCustomer.CartID})
+		return err
+	})
+}
+
+func (m *Mongo) MargeCart(ctx context.Context, customerID string, sessionID string) error {
+	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5*time.Second))
+	defer cancel()
+
+	return m.Client.UseSession(_ctx, func(s mongo.SessionContext) error {
+		id, err := primitive.ObjectIDFromHex(customerID)
+		if err != nil {
+			return err
+		}
+		customersCol := s.Client().Database(databaseName).Collection("customers")
+		mongoCustomer := new(MongoCustomer)
+		if err := customersCol.FindOne(s, bson.M{"_id": id}).Decode(mongoCustomer); err != nil {
+			return err
+		}
+
+		cartsCol := s.Client().Database(databaseName).Collection("carts")
+		mongoCart := new(MongoCart)
+		if err := cartsCol.FindOne(s, bson.M{"_id": mongoCustomer.CartID}).Decode(mongoCart); err != nil {
+			return err
+		}
+
+		_sessionID, err := primitive.ObjectIDFromHex(sessionID)
+		if err != nil {
+			return err
+		}
+
+		sessionMongoCustomer := new(MongoCustomer)
+		if err := customersCol.FindOne(s, bson.M{"_id": _sessionID}).Decode(sessionMongoCustomer); err != nil {
+			return err
+		}
+
+		sessionMongoCart := new(MongoCart)
+		if err := cartsCol.FindOne(s, bson.M{"_id": sessionMongoCustomer.CartID}).Decode(sessionMongoCart); err != nil {
+			return err
+		}
+
+		mongoCart.ItemIDs = append(mongoCart.ItemIDs, sessionMongoCart.ItemIDs...)
+		_, err = cartsCol.UpdateOne(s, bson.M{"_id": mongoCart.ID}, bson.M{"items": mongoCart.ItemIDs})
+		return err
+	})
 }
 
 func (m *Mongo) Ping(ctx context.Context) error {
-	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5)*time.Second)
+	_ctx, cancel := context.WithTimeout(ctx, time.Duration(5*time.Second))
 	defer cancel()
 	return m.Client.Ping(_ctx, readpref.Primary())
 }

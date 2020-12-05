@@ -4,14 +4,14 @@ import "time"
 
 type Item struct {
 	ID        string
-	ItemID    string
+	CartID    string
 	Quantity  int
 	UnitPrice float64
 }
 
 type Cart struct {
-	CustomerID string
 	ID         string
+	CustomerID string
 	Items      []Item
 }
 
